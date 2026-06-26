@@ -22,7 +22,7 @@ Somba is designed to keep subscriptions alive when possible, avoid double charge
 
 ## Architecture image
 
-The system diagram is stored at [docs/assets/architecture.png](./docs/assets/architecture.png).
+![Architecture](./docs/assets/architecture.png)
 
 It shows the entry points, the outbox, relay shards, event queues, workers, the state machine, the ledger, and the merchant/Nomba touchpoints.
 

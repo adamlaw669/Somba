@@ -247,4 +247,3 @@ The codebase is intentionally small and modular.
 - [Proration](./docs/proration.md)
 - [NFRs](./docs/nfrs.md)
 - [Getting Started](./docs/getting-started.md)
-
