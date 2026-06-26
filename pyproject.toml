@@ -1,0 +1,10 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "somba"
+version = "0.1.0"
+description = "Somba recurring billing and recovery infrastructure"
+requires-python = ">=3.11"
+

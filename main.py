@@ -1,3 +1,5 @@
+"""Legacy entrypoint placeholder. Somba implementation is not included yet."""
+
 import os
 
 from fastapi import FastAPI, Request

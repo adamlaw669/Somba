@@ -1,0 +1,2 @@
+"""Customer route placeholder."""
+

@@ -1,0 +1,2 @@
+"""Webhook route placeholder."""
+

@@ -1,0 +1,2 @@
+"""Subscription route placeholder."""
+

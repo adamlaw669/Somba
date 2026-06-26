@@ -1,0 +1,2 @@
+"""Nomba HTTP client placeholder."""
+

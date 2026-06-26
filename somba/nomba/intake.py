@@ -1,0 +1,2 @@
+"""Nomba webhook intake placeholder."""
+
