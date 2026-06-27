@@ -48,4 +48,4 @@ jobs:
 
       - name: Restart service
         run: |
-          ssh kodedlabs "cd '${{ env.APP_DIR }}' && docker compose up -d --build app"
+          ssh kodedlabs "cd '${{ env.APP_DIR }}' && docker compose up -d redpanda && docker compose up -d --build app"

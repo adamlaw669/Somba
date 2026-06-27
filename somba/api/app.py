@@ -5,6 +5,7 @@ from __future__ import annotations
 from fastapi import Depends, FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
+from pydantic import BaseModel
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
@@ -14,6 +15,7 @@ from somba.api.middleware.idempotency import IdempotencyMiddleware
 from somba.api.webhooks import router as webhooks_router
 from somba.db.models import Merchant
 from somba.db.session import get_db, init_db
+from somba.security import generate_api_key_material
 
 app = FastAPI(title="Somba")
 app.add_middleware(IdempotencyMiddleware)
@@ -42,6 +44,38 @@ async def validation_error_handler(_: Request, exc: RequestValidationError) -> J
             }
         },
     )
+
+
+class MerchantCreateRequest(BaseModel):
+    name: str
+    webhook_url: str | None = None
+    webhook_secret: str = ""
+
+
+@app.post("/v1/merchants", status_code=201)
+def create_merchant(
+    body: MerchantCreateRequest,
+    db: Session = Depends(get_db),
+) -> dict[str, object]:
+    key = generate_api_key_material()
+    merchant = Merchant(
+        name=body.name,
+        api_key_id=key.public_id,
+        api_key_hash=key.secret_hash,
+        webhook_url=body.webhook_url,
+        webhook_secret=body.webhook_secret,
+    )
+    db.add(merchant)
+    db.commit()
+    db.refresh(merchant)
+    return {
+        "merchant": {
+            "id": merchant.id,
+            "name": merchant.name,
+            "webhook_url": merchant.webhook_url,
+        },
+        "api_key": key.token,
+    }
 
 
 @app.get("/health")
