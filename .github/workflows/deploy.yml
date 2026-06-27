@@ -42,6 +42,7 @@ jobs:
             --exclude '.github' \
             --exclude '__pycache__' \
             --exclude '.venv' \
+            --exclude '.env' \
             ./ \
             kodedlabs:${{ env.APP_DIR }}
 
