@@ -11,13 +11,14 @@ from starlette.responses import Response
 from somba.api.errors import APIError, error_response
 
 MUTATING_METHODS = {"POST", "PUT", "PATCH", "DELETE"}
+IDEMPOTENCY_EXEMPT = {"/v1/webhooks/nomba"}
 
 
 class IdempotencyMiddleware(BaseHTTPMiddleware):
     """Require an idempotency key for mutating requests."""
 
     async def dispatch(self, request: Request, call_next: Callable[[Request], Response]) -> Response:
-        if request.method in MUTATING_METHODS:
+        if request.method in MUTATING_METHODS and request.url.path not in IDEMPOTENCY_EXEMPT:
             key = request.headers.get("Idempotency-Key", "").strip()
             if not key:
                 error = APIError(

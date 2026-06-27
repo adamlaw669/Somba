@@ -11,11 +11,13 @@ from sqlalchemy.orm import Session
 from somba.api.errors import APIError, error_response
 from somba.api.middleware.auth import get_current_merchant
 from somba.api.middleware.idempotency import IdempotencyMiddleware
+from somba.api.webhooks import router as webhooks_router
 from somba.db.models import Merchant
 from somba.db.session import get_db, init_db
 
 app = FastAPI(title="Somba")
 app.add_middleware(IdempotencyMiddleware)
+app.include_router(webhooks_router)
 
 
 @app.on_event("startup")
