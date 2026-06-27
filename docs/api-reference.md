@@ -8,9 +8,9 @@ The API uses bearer tokens.
 
 Example:
 
-`Authorization: Bearer sk_live_...`
+`Authorization: Bearer sk-somba-<key_id>.<secret>`
 
-The token identifies the merchant and is the first gate for access control. If a request does not present a valid token, it is rejected.
+The token identifies the merchant and is the first gate for access control. The `key_id` helps Somba look up the correct merchant, and the secret part is checked against the stored bcrypt hash. If a request does not present a valid token, it is rejected.
 
 ## Idempotency
 
@@ -19,6 +19,8 @@ Mutating endpoints require an `Idempotency-Key` header.
 This means if a client retries the same request because of a timeout or network problem, Somba can recognize that it has already seen the request and should not create a second subscription, second invoice, or second charge attempt.
 
 In plain English: doing the same action twice should have the same effect as doing it once.
+
+Somba stores these request fingerprints in an internal idempotency record so retries can be handled safely across process restarts.
 
 ## Error shape
 

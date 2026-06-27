@@ -1,14 +1,16 @@
 # Data Model
 
-This page documents the 14 tables used by Somba, the key columns in each table, and the indexes that keep billing and reconciliation fast.
+This page documents the core tables used by Somba, the key columns in each table, and the indexes that keep billing and reconciliation fast.
 
 All money values are stored in kobo, the smallest unit of naira, like cents to dollars.
+
+Somba also keeps one support table for idempotency records so retry-safe requests can be tracked across process restarts.
 
 ## Merchants
 
 Stores each business using Somba.
 
-- Key fields: `id`, `name`, `api_key_hash`, `webhook_url`, `webhook_secret`
+- Key fields: `id`, `name`, `api_key_id`, `api_key_hash`, `webhook_url`, `webhook_secret`
 - Why it matters: every other record belongs to one merchant
 
 ## Plans
@@ -108,6 +110,14 @@ Stores outbound webhook attempts to merchants.
 
 - Key fields: `id`, `merchant_id`, `event_type`, `payload`, `signature`, `status`, `attempt_count`, `next_retry_at`
 - Why it matters: merchants must not miss important billing events just because one delivery failed
+
+## Idempotency records
+
+Stores the fingerprint of mutating requests.
+
+- Key fields: `id`, `merchant_id`, `idempotency_key`, `method`, `path`, `request_hash`, `status`, `response_status`, `response_body`, `expires_at`
+- Key constraint: unique on `(merchant_id, idempotency_key, method, path)`
+- Why it matters: retries should not create duplicate billing actions
 
 ## Why the model is structured this way
 

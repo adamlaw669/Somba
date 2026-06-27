@@ -1,0 +1,92 @@
+Somba Team Plan
+
+Context
+- You are the lead and main coder.
+- Team member 1 will help with infra and backend support work.
+- Team member 2 will focus on the gym demo app, the docs page, and one small supporting infra feature.
+
+Your role
+- Own the core backend and architecture decisions.
+- Build the subscription engine.
+- Build the billing flow end to end.
+- Build reconciliation and ledger correctness.
+- Build the infra pieces that connect the system.
+- Review and merge teammate work.
+- Fix integration issues and hard bugs.
+
+What you handle directly
+- Database schema decisions and migrations.
+- Subscription state machine logic.
+- Billing lock and idempotency design.
+- Charge orchestration flow.
+- Outbox and relay behavior.
+- Reconciliation logic.
+- Nomba integration glue.
+- Queue and event wiring.
+- Final integration and release readiness.
+
+Team member 1: infra support
+- Add small database or migration pieces.
+- Help with queue plumbing and event envelope handling.
+- Help with scheduler scaffolding.
+- Help with auth and idempotency middleware.
+- Add focused tests for the infra pieces they touch.
+
+Good tasks for team member 1
+- Add the billing lock table migration.
+- Add the outbox pending index migration.
+- Implement request idempotency header parsing.
+- Wire the scheduler job that finds due subscriptions.
+- Add tests for merchant isolation on one endpoint.
+
+Team member 2: gym demo app and docs
+- Build the gym membership demo app.
+- Create the docs page for the usage app.
+- Build the customer-facing subscription screens.
+- Show the subscription lifecycle in a real use case.
+- Add one small infra feature that supports the app.
+
+Suggested gym app scope
+- Landing page for the gym.
+- Sign-up or plan selection page.
+- Subscription status page.
+- Payment history page.
+- Pause, resume, and cancel actions.
+- Recovery status screen.
+- Simple portal flow for updating billing details.
+
+Good small infra feature for team member 2
+- Customer portal auth flow.
+- Webhook event viewer.
+- Demo tenant seeding script.
+- A small status endpoint for the app.
+- Sample subscription data loader.
+
+Suggested split
+| Person | Main focus | Secondary focus |
+|---|---|---|
+| You | Core backend and system design | Integration, review, hard bugs |
+| Team member 1 | Infra support with you | Small backend tasks and tests |
+| Team member 2 | Gym demo app and docs page | One small supporting infra feature |
+
+Recommended work order
+1. Lock the data model.
+2. Lock the API, auth, and idempotency rules.
+3. Build the core billing engine.
+4. Build reconciliation and recovery.
+5. Wire webhooks and the demo app.
+6. Add tests and edge-case coverage.
+7. Polish docs and examples.
+
+Rules for task size
+- Keep tasks small and complete.
+- Give each person one clear outcome at a time.
+- Avoid open-ended assignments like "build billing."
+- Prefer one page, one feature, one migration, one screen, or one test set.
+
+What the team should aim for
+- Safe billing.
+- Clear recovery.
+- Clean docs.
+- A real demo app a gym could use.
+- A system the team can explain without hand-waving.
