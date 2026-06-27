@@ -9,6 +9,7 @@ on:
 env:
   VPS_HOST: 162.35.161.147
   VPS_USER: kodedlabs
+  APP_DIR: /home/kodedlabs/somba
 
 jobs:
   deploy:
@@ -32,7 +33,7 @@ jobs:
           EOF
 
       - name: Ensure app directory exists
-        run: ssh kodedlabs "mkdir -p ${{ vars.VPS_APP_DIR }}"
+        run: ssh kodedlabs "mkdir -p ${{ env.APP_DIR }}"
 
       - name: Sync app to VPS
         run: |
@@ -42,8 +43,8 @@ jobs:
             --exclude '__pycache__' \
             --exclude '.venv' \
             ./ \
-            kodedlabs:${{ vars.VPS_APP_DIR }}
+            kodedlabs:${{ env.APP_DIR }}
 
       - name: Restart service
         run: |
-          ssh kodedlabs "cd '${{ vars.VPS_APP_DIR }}' && docker compose up -d --build app"
+          ssh kodedlabs "cd '${{ env.APP_DIR }}' && docker compose up -d --build app"
