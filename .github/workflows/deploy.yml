@@ -31,6 +31,9 @@ jobs:
               IdentityFile ~/.ssh/id_ed25519
           EOF
 
+      - name: Ensure app directory exists
+        run: ssh kodedlabs "mkdir -p ${{ vars.VPS_APP_DIR }}"
+
       - name: Sync app to VPS
         run: |
           rsync -az --delete \
