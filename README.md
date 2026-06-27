@@ -30,6 +30,7 @@ It shows the entry points, the outbox, relay shards, event queues, workers, the 
 
 - [Overview](./docs/overview.md)
 - [Architecture](./docs/architecture.md)
+- [Deployment](./docs/deployment.md)
 - [State Machine](./docs/state-machine.md)
 - [Recovery Engine](./docs/recovery-engine.md)
 - [Reconciliation](./docs/reconciliation.md)

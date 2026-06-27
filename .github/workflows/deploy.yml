@@ -1,0 +1,46 @@
+name: Deploy
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+env:
+  VPS_HOST: 162.35.161.147
+  VPS_USER: kodedlabs
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Prepare SSH
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s\n' "${{ secrets.VPS_SSH_PRIVATE_KEY }}" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -H "${{ env.VPS_HOST }}" >> ~/.ssh/known_hosts
+          cat >> ~/.ssh/config << EOF
+          Host kodedlabs
+              HostName ${{ env.VPS_HOST }}
+              User ${{ env.VPS_USER }}
+              IdentityFile ~/.ssh/id_ed25519
+          EOF
+
+      - name: Sync app to VPS
+        run: |
+          rsync -az --delete \
+            --exclude '.git' \
+            --exclude '.github' \
+            --exclude '__pycache__' \
+            --exclude '.venv' \
+            ./ \
+            kodedlabs:${{ vars.VPS_APP_DIR }}
+
+      - name: Restart service
+        run: |
+          ssh kodedlabs "cd '${{ vars.VPS_APP_DIR }}' && docker compose up -d --build app"

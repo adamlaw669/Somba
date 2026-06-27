@@ -27,6 +27,7 @@ The project expects the following environment variables:
 - `NOMBA_API_KEY` - API credential for Nomba
 - `NOMBA_API_SECRET` - secret for Nomba-related auth
 - `WEBHOOK_SIGNING_SECRET` - secret used to sign outbound webhooks
+- `PUBLIC_BASE_URL` - public URL of the deployed app, used to form webhook URLs
 
 Other variables may be added later, but these are the core ones the scaffold already anticipates.
 

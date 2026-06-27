@@ -1,2 +1,16 @@
-services: {}
+services:
+  app:
+    build: .
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: ${DATABASE_URL:-sqlite:////data/somba.db}
+      PORT: ${PORT:-8000}
+    ports:
+      - "${PORT:-8000}:8000"
+    volumes:
+      - somba-data:/data
+    restart: unless-stopped
 
+volumes:
+  somba-data:
