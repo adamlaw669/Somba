@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from fastapi.responses import JSONResponse
 
 
-@dataclass(frozen=True)
+@dataclass
 class APIError(Exception):
     """Application error with a machine-readable code and HTTP status."""
 
