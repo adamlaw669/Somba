@@ -1,4 +1,4 @@
-"""Charge worker: read due billing rows, acquire locks, write ledger intents."""
+"""Charge worker: billing sweep → intents, then intent → Nomba → settlement."""
 
 from __future__ import annotations
 
@@ -10,20 +10,45 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from somba.db.models import (
+    ChargeAttempt,
+    ChargeAttemptStatus,
+    Customer,
+    FailureClass,
     Invoice,
     InvoiceStatus,
     InvoiceType,
     LedgerIntent,
     LedgerIntentStatus,
+    LedgerSettlement,
+    LedgerSettlementSource,
+    LedgerSettlementStatus,
+    OutboxEvent,
+    OutboxEventStatus,
     Plan,
+    Subscription,
+    SubscriptionEventTrigger,
+    SubscriptionStatus,
 )
+from somba.nomba import client as nomba_client
+from somba.nomba.client import NombaChargeStatus
 from somba.scheduler.billing_sweep import acquire_billing_lock, fetch_due_subscriptions
+from somba.subscriptions.state_machine import transition
+from somba.workers.recovery.classifier import classify
+from somba.workers.recovery.engine import run as recovery_run
 
 log = logging.getLogger(__name__)
 
 
+# ---------------------------------------------------------------------------
+# Phase 1: billing sweep → write ledger intents
+# ---------------------------------------------------------------------------
+
+
 def run(db: Session, cutoff: datetime | None = None) -> int:
-    """Process one sweep batch. Returns number of intents written."""
+    """Find due subscriptions and write one LedgerIntent per billing period.
+
+    Returns the number of intents written.
+    """
     cutoff = cutoff or datetime.now(tz=timezone.utc)
     due = fetch_due_subscriptions(db, cutoff)
     log.info("charge_worker: %d subscriptions due at %s", len(due), cutoff.isoformat())
@@ -63,8 +88,309 @@ def run(db: Session, cutoff: datetime | None = None) -> int:
     return written
 
 
-def _get_or_create_open_invoice(db: Session, sub: object, cutoff: datetime) -> Invoice:
-    """Return the existing open invoice for this period or create a draft one."""
+# ---------------------------------------------------------------------------
+# Phase 2: execute pending intents → Nomba call → parse → publish
+# ---------------------------------------------------------------------------
+
+_EXECUTE_LIMIT = 200
+
+
+def execute_pending(
+    db: Session,
+    *,
+    nomba_base_url: str | None = None,
+    now: datetime | None = None,
+    limit: int = _EXECUTE_LIMIT,
+) -> int:
+    """Read pending LedgerIntents, call Nomba, record ChargeAttempt, handle result.
+
+    Returns the number of intents processed (regardless of outcome).
+    """
+    now = now or datetime.now(tz=timezone.utc)
+    intents: list[LedgerIntent] = list(
+        db.scalars(
+            select(LedgerIntent)
+            .where(LedgerIntent.status == LedgerIntentStatus.pending)
+            .order_by(LedgerIntent.id)
+            .limit(limit)
+        )
+    )
+    log.info("charge_worker.execute: %d pending intents", len(intents))
+
+    processed = 0
+    for intent in intents:
+        _execute_one(db, intent, nomba_base_url=nomba_base_url, now=now)
+        processed += 1
+
+    return processed
+
+
+def _execute_one(
+    db: Session,
+    intent: LedgerIntent,
+    *,
+    nomba_base_url: str | None,
+    now: datetime,
+) -> None:
+    sub: Subscription = db.get(Subscription, intent.subscription_id)
+    customer: Customer = db.get(Customer, sub.customer_id)
+    invoice: Invoice = db.get(Invoice, intent.invoice_id)
+
+    # Derive billing period from invoice for a stable, date-safe key
+    billing_period = (
+        invoice.period_start.date()
+        if invoice.period_start
+        else now.date()
+    )
+
+    # Count prior attempts to build the attempt_number
+    prior_attempts: int = db.query(ChargeAttempt).filter(
+        ChargeAttempt.subscription_id == sub.id,
+        ChargeAttempt.invoice_id == invoice.id,
+    ).count()
+    attempt_number = prior_attempts + 1
+
+    # Idempotency key: charge_{sub}_{period}_{attempt}
+    idem_key = f"charge_{sub.id}_{billing_period.isoformat()}_{attempt_number}"
+    existing_attempt = db.scalar(
+        select(ChargeAttempt).where(ChargeAttempt.idempotency_key == idem_key)
+    )
+    if existing_attempt:
+        log.debug("charge_worker.execute: attempt already exists sub=%d key=%s", sub.id, idem_key)
+        return
+
+    if not customer.token_key:
+        log.warning("charge_worker.execute: no token_key for customer=%d sub=%d", customer.id, sub.id)
+        _handle_failure(db, intent=intent, sub=sub, invoice=invoice, attempt_number=attempt_number,
+                        idem_key=idem_key, reason="no_token_key", code=None, now=now)
+        return
+
+    # Call Nomba
+    result = nomba_client.charge(
+        order_reference=intent.order_reference,
+        amount_kobo=intent.amount,
+        customer_token_key=customer.token_key,
+        idempotency_key=idem_key,
+        base_url=nomba_base_url,
+    )
+    log.info(
+        "charge_worker.execute: nomba=%s sub=%d attempt=%d order=%s",
+        result.status.value,
+        sub.id,
+        attempt_number,
+        intent.order_reference,
+    )
+
+    if result.status == NombaChargeStatus.succeeded:
+        _handle_success(db, intent=intent, sub=sub, invoice=invoice,
+                        attempt_number=attempt_number, idem_key=idem_key,
+                        transaction_id=result.transaction_id, now=now)
+
+    elif result.status == NombaChargeStatus.failed:
+        _handle_failure(db, intent=intent, sub=sub, invoice=invoice,
+                        attempt_number=attempt_number, idem_key=idem_key,
+                        reason=result.failure_reason, code=result.response_code, now=now)
+
+    else:  # uncertain
+        _handle_uncertain(db, intent=intent, sub=sub,
+                          attempt_number=attempt_number, idem_key=idem_key,
+                          reason=result.failure_reason, now=now)
+
+
+def _handle_success(
+    db: Session,
+    *,
+    intent: LedgerIntent,
+    sub: Subscription,
+    invoice: Invoice,
+    attempt_number: int,
+    idem_key: str,
+    transaction_id: str | None,
+    now: datetime,
+) -> None:
+    attempt = ChargeAttempt(
+        merchant_id=sub.merchant_id,
+        subscription_id=sub.id,
+        invoice_id=invoice.id,
+        idempotency_key=idem_key,
+        order_reference=intent.order_reference,
+        amount=intent.amount,
+        status=ChargeAttemptStatus.succeeded,
+        attempt_number=attempt_number,
+    )
+    db.add(attempt)
+    db.flush()
+
+    intent.status = LedgerIntentStatus.matched
+    intent.charge_attempt_id = attempt.id
+
+    db.add(LedgerSettlement(
+        merchant_id=sub.merchant_id,
+        intent_id=intent.id,
+        invoice_id=invoice.id,
+        order_reference=intent.order_reference,
+        transaction_ref=transaction_id or "",
+        amount=intent.amount,
+        source=LedgerSettlementSource.webhook,
+        status=LedgerSettlementStatus.matched,
+        raw_payload={"transaction_id": transaction_id},
+    ))
+
+    invoice.status = InvoiceStatus.paid
+    invoice.paid_at = now
+
+    if sub.status in (SubscriptionStatus.past_due, SubscriptionStatus.trialing):
+        transition(sub, SubscriptionStatus.active, SubscriptionEventTrigger.scheduler, db,
+                   metadata={"charge_attempt_id": attempt.id})
+    elif sub.status == SubscriptionStatus.active:
+        pass  # already active; just let the period advance
+
+    db.add(_outbox(
+        merchant_id=sub.merchant_id,
+        aggregate_id=str(sub.id),
+        event_type="charge.succeeded",
+        payload={
+            "subscription_id": sub.id,
+            "invoice_id": invoice.id,
+            "amount": intent.amount,
+            "charge_attempt_id": attempt.id,
+        },
+    ))
+    db.commit()
+    log.info("charge_worker.execute: succeeded sub=%d invoice=%d", sub.id, invoice.id)
+
+
+def _handle_failure(
+    db: Session,
+    *,
+    intent: LedgerIntent,
+    sub: Subscription,
+    invoice: Invoice,
+    attempt_number: int,
+    idem_key: str,
+    reason: str | None,
+    code: str | None,
+    now: datetime,
+) -> None:
+    failure_class: FailureClass = classify(code, reason)
+
+    attempt = ChargeAttempt(
+        merchant_id=sub.merchant_id,
+        subscription_id=sub.id,
+        invoice_id=invoice.id,
+        idempotency_key=idem_key,
+        order_reference=intent.order_reference,
+        amount=intent.amount,
+        status=ChargeAttemptStatus.failed,
+        failure_reason=reason,
+        failure_class=failure_class,
+        attempt_number=attempt_number,
+    )
+    db.add(attempt)
+    db.flush()
+
+    intent.status = LedgerIntentStatus.unmatched
+    intent.charge_attempt_id = attempt.id
+
+    # Transition subscription to past_due if it isn't already
+    if sub.status == SubscriptionStatus.active:
+        transition(sub, SubscriptionStatus.past_due, SubscriptionEventTrigger.scheduler, db,
+                   metadata={"charge_attempt_id": attempt.id, "failure_class": failure_class.value})
+    elif sub.status == SubscriptionStatus.trialing:
+        transition(sub, SubscriptionStatus.past_due, SubscriptionEventTrigger.scheduler, db,
+                   metadata={"charge_attempt_id": attempt.id, "failure_class": failure_class.value})
+
+    action = recovery_run(
+        db,
+        merchant_id=sub.merchant_id,
+        subscription_id=sub.id,
+        invoice_id=invoice.id,
+        charge_attempt_id=attempt.id,
+        failure_class=failure_class,
+        attempt_number=attempt_number,
+        now=now,
+    )
+
+    db.add(_outbox(
+        merchant_id=sub.merchant_id,
+        aggregate_id=str(sub.id),
+        event_type="charge.failed",
+        payload={
+            "subscription_id": sub.id,
+            "invoice_id": invoice.id,
+            "charge_attempt_id": attempt.id,
+            "failure_class": failure_class.value,
+            "failure_reason": reason,
+            "recovery_action": action,
+        },
+    ))
+    db.commit()
+    log.info("charge_worker.execute: failed sub=%d class=%s action=%s", sub.id, failure_class.value, action)
+
+
+def _handle_uncertain(
+    db: Session,
+    *,
+    intent: LedgerIntent,
+    sub: Subscription,
+    attempt_number: int,
+    idem_key: str,
+    reason: str | None,
+    now: datetime,
+) -> None:
+    attempt = ChargeAttempt(
+        merchant_id=sub.merchant_id,
+        subscription_id=sub.id,
+        invoice_id=intent.invoice_id,
+        idempotency_key=idem_key,
+        order_reference=intent.order_reference,
+        amount=intent.amount,
+        status=ChargeAttemptStatus.uncertain,
+        failure_reason=reason,
+        attempt_number=attempt_number,
+    )
+    db.add(attempt)
+    db.flush()
+
+    intent.charge_attempt_id = attempt.id
+    # Keep intent as pending so the verify pass can resolve it later
+
+    if sub.status in (SubscriptionStatus.active, SubscriptionStatus.trialing, SubscriptionStatus.past_due):
+        transition(sub, SubscriptionStatus.payment_uncertain, SubscriptionEventTrigger.scheduler, db,
+                   metadata={"charge_attempt_id": attempt.id, "reason": reason})
+
+    db.add(_outbox(
+        merchant_id=sub.merchant_id,
+        aggregate_id=str(sub.id),
+        event_type="charge.uncertain",
+        payload={
+            "subscription_id": sub.id,
+            "invoice_id": intent.invoice_id,
+            "charge_attempt_id": attempt.id,
+        },
+    ))
+    db.commit()
+    log.info("charge_worker.execute: uncertain sub=%d attempt=%d", sub.id, attempt_number)
+
+
+def _outbox(*, merchant_id: int, aggregate_id: str, event_type: str, payload: dict) -> OutboxEvent:
+    return OutboxEvent(
+        merchant_id=merchant_id,
+        aggregate_type="subscription",
+        aggregate_id=aggregate_id,
+        event_type=event_type,
+        payload=payload,
+        partition_key=aggregate_id,
+        status=OutboxEventStatus.pending,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Shared helpers
+# ---------------------------------------------------------------------------
+
+
+def _get_or_create_open_invoice(db: Session, sub: Subscription, cutoff: datetime) -> Invoice:
     existing = db.scalar(
         select(Invoice).where(
             Invoice.subscription_id == sub.id,

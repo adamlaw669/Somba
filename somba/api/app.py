@@ -14,6 +14,7 @@ from somba.api.errors import APIError, error_response
 from somba.api.middleware.auth import get_current_merchant
 from somba.api.middleware.idempotency import IdempotencyMiddleware
 from somba.api.plans import router as plans_router
+from somba.api.subscriptions import router as subscriptions_router
 from somba.api.webhooks import router as webhooks_router
 from somba.db.models import Merchant
 from somba.db.session import get_db, init_db
@@ -24,6 +25,7 @@ app.add_middleware(IdempotencyMiddleware)
 app.include_router(webhooks_router)
 app.include_router(plans_router)
 app.include_router(customers_router)
+app.include_router(subscriptions_router)
 
 
 @app.on_event("startup")
