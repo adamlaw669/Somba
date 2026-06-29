@@ -1,0 +1,132 @@
+@import "tailwindcss";
+
+/*
+  GymFlow — athletic/industrial design system for Somba's demo.
+  Mandated palette: yellow, black, white. Everything else is disciplined neutral
+  plus a tiny, muted semantic set for billing clarity (status must be unambiguous).
+*/
+
+@theme {
+  /* Core palette */
+  --color-ink: #0a0a0a;        /* near-black, primary structure */
+  --color-ink-2: #161616;      /* raised dark surface */
+  --color-ink-3: #242424;      /* hairline borders on dark */
+  --color-paper: #ffffff;
+  --color-concrete: #f4f4f2;   /* cool off-white app surface */
+  --color-concrete-2: #e8e8e4; /* dividers / inset */
+  --color-smoke: #6b6b66;      /* muted text */
+  --color-smoke-2: #9a9a94;    /* fainter text */
+
+  /* Signature accent */
+  --color-volt: #ffe600;       /* electric yellow */
+  --color-volt-deep: #d9c400;  /* yellow for borders/hover on light */
+
+  /* Muted semantic set — used only on status, never decoration */
+  --color-due: #f59e0b;        /* past_due / open invoice — amber */
+  --color-frozen: #5b7a99;     /* payment_uncertain — cold slate */
+  --color-danger: #dc2626;     /* failed / void */
+  --color-rest: #8a8a84;       /* paused / cancelled / expired — gray */
+
+  --font-display: var(--font-archivo);
+  --font-sans: var(--font-hanken);
+  --font-mono: var(--font-jetbrains);
+
+  --radius-card: 4px;
+}
+
+:root {
+  --background: var(--color-concrete);
+  --foreground: var(--color-ink);
+}
+
+* {
+  border-color: var(--color-concrete-2);
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans), system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* --- Type primitives --- */
+.display {
+  font-family: var(--font-display), sans-serif;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  line-height: 0.92;
+  text-transform: uppercase;
+}
+.kicker {
+  font-family: var(--font-mono), monospace;
+  font-size: 0.7rem;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  font-weight: 500;
+}
+.mono { font-family: var(--font-mono), monospace; }
+
+/* --- Signature: hazard tape (used sparingly) --- */
+.hazard {
+  background-image: repeating-linear-gradient(
+    -45deg,
+    var(--color-volt) 0,
+    var(--color-volt) 14px,
+    var(--color-ink) 14px,
+    var(--color-ink) 28px
+  );
+}
+.hazard-thin {
+  background-image: repeating-linear-gradient(
+    -45deg,
+    var(--color-volt) 0,
+    var(--color-volt) 8px,
+    var(--color-ink) 8px,
+    var(--color-ink) 16px
+  );
+}
+
+/* Focus visibility — quality floor */
+:focus-visible {
+  outline: 3px solid var(--color-volt);
+  outline-offset: 2px;
+}
+
+/* Utility: brushed metal sheen on the membership card */
+.foil {
+  background:
+    linear-gradient(135deg, #1c1c1c 0%, #0a0a0a 40%, #1a1a1a 60%, #0a0a0a 100%);
+}
+
+@keyframes fade-up {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.fade-up { animation: fade-up 0.6s cubic-bezier(0.16, 1, 0.3, 1) both; }
+
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
+}
+.live-dot { animation: pulse-dot 1.4s ease-in-out infinite; }
+
+@keyframes ticker {
+  from { transform: translateX(0); }
+  to { transform: translateX(-50%); }
+}
+.ticker-track { animation: ticker 26s linear infinite; }
