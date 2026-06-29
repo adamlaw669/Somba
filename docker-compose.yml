@@ -1,0 +1,34 @@
+services:
+  redpanda:
+    image: redpandadata/redpanda:latest
+    command:
+      - redpanda
+      - start
+      - --smp=1
+      - --memory=512M
+      - --reserve-memory=0M
+      - --overprovisioned
+      - --node-id=0
+      - --kafka-addr=PLAINTEXT://0.0.0.0:9092
+      - --advertise-kafka-addr=PLAINTEXT://redpanda:9092
+    ports:
+      - "9092:9092"
+    volumes:
+      - redpanda-data:/var/lib/redpanda/data
+    restart: unless-stopped
+
+  app:
+    build: .
+    env_file:
+      - .env
+    environment:
+      REDPANDA_BROKERS: redpanda:9092
+      PORT: ${PORT:-8000}
+    ports:
+      - "${PORT:-8000}:8000"
+    depends_on:
+      - redpanda
+    restart: unless-stopped
+
+volumes:
+  redpanda-data:

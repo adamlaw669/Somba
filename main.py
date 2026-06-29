@@ -1,22 +1,17 @@
+"""Entry point for the Somba API."""
+
+from __future__ import annotations
+
 import os
 
-from fastapi import FastAPI, Request
+import uvicorn
 
-app = FastAPI()
-
-
-@app.post("/webhooks/nomba")
-async def nomba_webhook(request: Request):
-    event = await request.json()
-    print("Nomba event received:", event)
-    return {"status": "received"}
-
-
-@app.get("/")
-async def health():
-    return {"status": "Somba webhook is aliveee"}
+from somba.api.app import app
 
 
 if __name__ == "__main__":
+<<<<<<< HEAD
     import uvicorn
+=======
+>>>>>>> refs/remotes/origin/main
     uvicorn.run(app, host="0.0.0.0", port=int(os.environ.get("PORT", 8000)))

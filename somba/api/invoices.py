@@ -1,0 +1,2 @@
+"""Invoice route placeholder."""
+
