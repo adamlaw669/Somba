@@ -11,6 +11,8 @@ from sqlalchemy.orm import Session
 
 from somba.api.customers import router as customers_router
 from somba.api.errors import APIError, error_response
+from somba.api.events import router as events_router
+from somba.api.invoices import router as invoices_router
 from somba.api.middleware.auth import get_current_merchant
 from somba.api.middleware.idempotency import IdempotencyMiddleware
 from somba.api.plans import router as plans_router
@@ -26,6 +28,8 @@ app.include_router(webhooks_router)
 app.include_router(plans_router)
 app.include_router(customers_router)
 app.include_router(subscriptions_router)
+app.include_router(invoices_router)
+app.include_router(events_router)
 
 
 @app.on_event("startup")

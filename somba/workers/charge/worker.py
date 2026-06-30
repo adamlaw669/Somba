@@ -159,18 +159,16 @@ def _execute_one(
         log.debug("charge_worker.execute: attempt already exists sub=%d key=%s", sub.id, idem_key)
         return
 
-    if not customer.token_key:
-        log.warning("charge_worker.execute: no token_key for customer=%d sub=%d", customer.id, sub.id)
+    if not customer.mandate_id:
+        log.warning("charge_worker.execute: no mandate_id for customer=%d sub=%d", customer.id, sub.id)
         _handle_failure(db, intent=intent, sub=sub, invoice=invoice, attempt_number=attempt_number,
-                        idem_key=idem_key, reason="no_token_key", code=None, now=now)
+                        idem_key=idem_key, reason="no_mandate_id", code=None, now=now)
         return
 
-    # Call Nomba
-    result = nomba_client.charge(
-        order_reference=intent.order_reference,
+    # Call Nomba direct debit
+    result = nomba_client.debit_mandate(
+        mandate_id=customer.mandate_id,
         amount_kobo=intent.amount,
-        customer_token_key=customer.token_key,
-        idempotency_key=idem_key,
         base_url=nomba_base_url,
     )
     log.info(
@@ -231,7 +229,7 @@ def _handle_success(
         order_reference=intent.order_reference,
         transaction_ref=transaction_id or "",
         amount=intent.amount,
-        source=LedgerSettlementSource.webhook,
+        source=LedgerSettlementSource.direct_debit,
         status=LedgerSettlementStatus.matched,
         raw_payload={"transaction_id": transaction_id},
     ))

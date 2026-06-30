@@ -60,7 +60,9 @@ class Customer(Base):
     external_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
     email: Mapped[str | None] = mapped_column(String(255), nullable=True)
     name: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    token_key: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    mandate_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    bank_account_number: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    bank_code: Mapped[str | None] = mapped_column(String(16), nullable=True)
     va_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
     va_account_no: Mapped[str | None] = mapped_column(String(32), nullable=True)
     credit_balance: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0)
@@ -241,6 +243,7 @@ class LedgerSettlementSource(str, Enum):
     sweep = "sweep"
     verify_pass = "verify_pass"
     transfer_push = "transfer_push"
+    direct_debit = "direct_debit"
 
 
 class LedgerSettlementStatus(str, Enum):
@@ -324,11 +327,13 @@ class WebhookDelivery(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     merchant_id: Mapped[int] = mapped_column(ForeignKey("merchants.id"), index=True, nullable=False)
+    outbox_event_id: Mapped[int | None] = mapped_column(ForeignKey("outbox_events.id"), nullable=True, index=True)
     event_type: Mapped[str] = mapped_column(String(128), nullable=False)
     payload: Mapped[dict] = mapped_column(JSON, nullable=False)
     signature: Mapped[str] = mapped_column(Text, nullable=False)
     status: Mapped[WebhookDeliveryStatus] = mapped_column(_enum(WebhookDeliveryStatus), nullable=False, default=WebhookDeliveryStatus.pending)
     attempt_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    last_response_status: Mapped[int | None] = mapped_column(Integer, nullable=True)
     next_retry_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
