@@ -1,10 +1,11 @@
-"""Nomba HTTP client for initiating card/token charges."""
+"""Nomba HTTP client: charge, verify, and account-transaction fetch."""
 
 from __future__ import annotations
 
 import logging
 import os
 from dataclasses import dataclass, field
+from datetime import datetime
 from enum import Enum
 from typing import Any
 
@@ -116,3 +117,65 @@ def _parse_response(body: dict[str, Any], order_reference: str) -> NombaChargeRe
         response_code=effective_code,
         raw=body,
     )
+
+
+def verify_transaction(
+    *,
+    order_reference: str,
+    base_url: str | None = None,
+) -> NombaChargeResult:
+    """Ask Nomba for the definitive outcome of a prior charge using the order reference."""
+    base_url = base_url or os.environ.get("NOMBA_API_BASE_URL", "https://api.nomba.com")
+    token = os.environ.get("NOMBA_API_TOKEN", "")
+
+    try:
+        import httpx
+
+        with httpx.Client(timeout=30) as client:
+            resp = client.get(
+                f"{base_url}/api/v1/transactions/{order_reference}",
+                headers={"Authorization": f"Bearer {token}"},
+            )
+        body: dict[str, Any] = resp.json()
+    except Exception as exc:
+        log.warning("nomba.verify: network error order=%s: %s", order_reference, exc)
+        return NombaChargeResult(
+            status=NombaChargeStatus.uncertain,
+            transaction_id=None,
+            failure_reason=f"network_error: {exc}",
+            response_code=None,
+            raw={},
+        )
+
+    return _parse_response(body, order_reference)
+
+
+def fetch_account_transactions(
+    *,
+    from_dt: datetime,
+    to_dt: datetime,
+    base_url: str | None = None,
+) -> list[dict[str, Any]]:
+    """Fetch recent account transactions from Nomba for reconciliation sweep."""
+    base_url = base_url or os.environ.get("NOMBA_API_BASE_URL", "https://api.nomba.com")
+    token = os.environ.get("NOMBA_API_TOKEN", "")
+
+    params = {
+        "from": from_dt.strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "to": to_dt.strftime("%Y-%m-%dT%H:%M:%SZ"),
+    }
+
+    try:
+        import httpx
+
+        with httpx.Client(timeout=30) as client:
+            resp = client.get(
+                f"{base_url}/api/v1/accounts/transactions",
+                params=params,
+                headers={"Authorization": f"Bearer {token}"},
+            )
+        body: dict[str, Any] = resp.json()
+        return body.get("data", body.get("transactions", []))
+    except Exception as exc:
+        log.warning("nomba.fetch_transactions: network error: %s", exc)
+        return []

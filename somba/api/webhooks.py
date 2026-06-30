@@ -7,19 +7,17 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, Header, Request
 from fastapi.responses import JSONResponse
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from somba.db.models import (
-    ChargeAttempt,
-    ChargeAttemptStatus,
+    Customer,
     LedgerIntent,
-    LedgerIntentStatus,
-    LedgerSettlement,
     LedgerSettlementSource,
-    LedgerSettlementStatus,
 )
 from somba.db.session import get_db
 from somba.nomba.intake import verify_nomba_signature
+from somba.workers.reconcile.writer import write_settlement
 
 router = APIRouter()
 log = logging.getLogger(__name__)
@@ -27,47 +25,56 @@ log = logging.getLogger(__name__)
 
 def _handle_payment_success(db: Session, payload: dict[str, Any]) -> None:
     transaction = payload.get("data", {}).get("transaction", {})
-    order_ref = transaction.get("aliasAccountReference", "")
-    transaction_ref = transaction.get("transactionId") or transaction.get("sessionId", "")
-    amount_kobo = int(transaction.get("transactionAmount", 0) * 100)
+    order_ref: str = transaction.get("aliasAccountReference", "")
+    transaction_ref: str = transaction.get("transactionId") or transaction.get("sessionId", "")
+    amount_kobo: int = int(float(transaction.get("transactionAmount", 0)) * 100)
 
-    intent = (
-        db.query(LedgerIntent)
-        .filter(
-            LedgerIntent.order_reference == order_ref,
-            LedgerIntent.status == LedgerIntentStatus.pending,
-        )
-        .first()
-    )
-
-    if intent is None:
-        log.warning("nomba webhook: no pending intent for order_reference=%s tx=%s", order_ref, transaction_ref)
+    if not transaction_ref:
+        log.warning("nomba webhook: missing transaction_ref — skipping")
         return
 
-    db.add(LedgerSettlement(
-        merchant_id=intent.merchant_id,
-        intent_id=intent.id,
-        invoice_id=intent.invoice_id,
+    # Resolve merchant_id: from matching intent, or from VA customer
+    intent: LedgerIntent | None = db.scalar(
+        select(LedgerIntent).where(LedgerIntent.order_reference == order_ref)
+    ) if order_ref else None
+
+    merchant_id: int | None = intent.merchant_id if intent else _merchant_id_from_va(db, payload)
+    if merchant_id is None:
+        log.warning("nomba webhook: cannot determine merchant for tx=%s order=%s", transaction_ref, order_ref)
+        return
+
+    res = write_settlement(
+        db,
+        merchant_id=merchant_id,
         order_reference=order_ref,
         transaction_ref=transaction_ref,
-        amount=amount_kobo,
+        amount_kobo=amount_kobo,
         source=LedgerSettlementSource.webhook,
-        status=LedgerSettlementStatus.matched,
         raw_payload=payload,
-    ))
-
-    intent.status = LedgerIntentStatus.matched
-
-    attempt = (
-        db.query(ChargeAttempt)
-        .filter(ChargeAttempt.order_reference == order_ref)
-        .first()
     )
-    if attempt:
-        attempt.status = ChargeAttemptStatus.succeeded
-
     db.commit()
-    log.info("nomba webhook: matched intent=%d tx=%s amount=%d kobo", intent.id, transaction_ref, amount_kobo)
+    log.info(
+        "nomba webhook: settlement=%d status=%s healed=%s tx=%s",
+        res.settlement.id,
+        res.status.value,
+        res.healed,
+        transaction_ref,
+    )
+
+
+def _merchant_id_from_va(db: Session, payload: dict[str, Any]) -> int | None:
+    txn = payload.get("data", {}).get("transaction", {})
+    va_no: str = (
+        txn.get("destinationAccountNumber")
+        or txn.get("beneficiaryAccountNumber")
+        or ""
+    )
+    if not va_no:
+        return None
+    customer: Customer | None = db.scalar(
+        select(Customer).where(Customer.va_account_no == va_no)
+    )
+    return customer.merchant_id if customer else None
 
 
 @router.post("/v1/webhooks/nomba")
