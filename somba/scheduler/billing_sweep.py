@@ -15,6 +15,8 @@ from somba.db.models import (
     Subscription,
     SubscriptionStatus,
 )
+from somba.outbox.writer import write_event
+
 
 log = logging.getLogger(__name__)
 
@@ -74,3 +76,44 @@ def acquire_billing_lock(
             billing_period,
         )
         return False
+
+
+def emit_due_billing_events(
+    db: Session,
+    cutoff: datetime | None = None,
+    limit: int = _SWEEP_LIMIT,
+) -> int:
+    """Find due subscriptions, lock each, emit one billing.due event.
+
+    The billing lock makes this exactly-once per (subscription, billing_period):
+    if the sweep runs twice, the second acquire_billing_lock returns False and
+    no duplicate event is emitted. The lock row and the outbox event commit in
+    the same transaction, so we never emit an event without holding the lock.
+    Returns the number of events emitted.
+    """
+    cutoff = cutoff or datetime.now(tz=timezone.utc)
+    due = fetch_due_subscriptions(db, cutoff, limit)
+
+    emitted = 0
+    for sub in due:
+        billing_period = cutoff.date()
+
+        if not acquire_billing_lock(db, sub.id, billing_period):
+            continue  # already billed this period — skip
+
+        write_event(
+            db,
+            merchant_id=sub.merchant_id,
+            aggregate_type="subscription",
+            aggregate_id=sub.id,
+            event_type="billing.due",
+            payload={
+                "subscription_id": sub.id,
+                "billing_period": billing_period.isoformat(),
+            },
+        )
+        db.commit()  # lock + outbox event commit atomically, per subscription
+        emitted += 1
+
+    log.info("billing_sweep: emitted %d billing.due events", emitted)
+    return emitted
