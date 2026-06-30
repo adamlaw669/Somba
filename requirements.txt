@@ -5,3 +5,4 @@ bcrypt==4.3.0
 alembic==1.16.2
 psycopg2-binary==2.9.10
 email-validator==2.3.0
+confluent-kafka==2.6.1
