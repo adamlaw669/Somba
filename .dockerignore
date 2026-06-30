@@ -1,6 +1,12 @@
 .git
 .github
 .venv
+venv
+venv_py39_old
+.vscode
+gymflow
+somba.db
+*.db
 __pycache__
 *.pyc
 *.pyo

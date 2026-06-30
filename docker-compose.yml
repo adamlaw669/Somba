@@ -9,10 +9,16 @@ services:
       - --reserve-memory=0M
       - --overprovisioned
       - --node-id=0
-      - --kafka-addr=PLAINTEXT://0.0.0.0:9092
-      - --advertise-kafka-addr=PLAINTEXT://redpanda:9092
+      # Two listeners: 'internal' for clients inside Docker (the app container),
+      # 'external' for clients on the host machine (your dev scripts/tests).
+      - --kafka-addr=internal://0.0.0.0:9092,external://0.0.0.0:19092
+      # What each listener tells clients to reconnect on. Must be reachable
+      # from where that client runs: 'redpanda' resolves only inside Docker;
+      # 'localhost' is how your Mac reaches the mapped port.
+      - --advertise-kafka-addr=internal://redpanda:9092,external://localhost:19092
     ports:
       - "9092:9092"
+      - "19092:19092"
     volumes:
       - redpanda-data:/var/lib/redpanda/data
     restart: unless-stopped
