@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 from enum import Enum
 
 from sqlalchemy import BigInteger, Boolean, Date, DateTime, Enum as SAEnum, ForeignKey, Integer, JSON, String, Text, UniqueConstraint, func
@@ -236,6 +236,11 @@ class LedgerIntent(Base):
     order_reference: Mapped[str] = mapped_column(String(255), unique=True, nullable=False)
     amount: Mapped[int] = mapped_column(BigInteger, nullable=False)
     status: Mapped[LedgerIntentStatus] = mapped_column(_enum(LedgerIntentStatus), nullable=False, default=LedgerIntentStatus.pending)
+    created_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+        default=lambda: datetime.now(timezone.utc),
+    )
 
 
 class LedgerSettlementSource(str, Enum):
