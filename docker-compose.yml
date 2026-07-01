@@ -29,9 +29,31 @@ services:
       - .env
     environment:
       REDPANDA_BROKERS: redpanda:9092
-      PORT: ${PORT:-8000}
+      # Hardcoded and NOT ${PORT:-8000}: env_file above already loads PORT from
+      # .env (used below to choose the *host*-side published port). Without this
+      # override that same value leaks into the container too, so uvicorn binds
+      # to e.g. 8001 while compose still forwards host:8001 -> container:8000 —
+      # a silent port mismatch. The container must always listen on 8000; only
+      # the host-side publish port is configurable.
+      PORT: "8000"
     ports:
       - "${PORT:-8000}:8000"
+    depends_on:
+      - redpanda
+    restart: unless-stopped
+
+  scheduler:
+    build: .
+    env_file:
+      - .env
+    environment:
+      REDPANDA_BROKERS: redpanda:9092
+    # Drives billing sweep -> charge execution, webhook delivery, reconciliation,
+    # and the alert ticks (somba/scheduler/runner.py). Without this service
+    # nothing ever charges a subscription or delivers a webhook — the API
+    # alone only handles inbound requests. Re-runs migrations on start (same
+    # as `app`) since alembic upgrade is idempotent and this may start first.
+    command: ["sh", "-c", "alembic upgrade head && python -m somba.scheduler.runner"]
     depends_on:
       - redpanda
     restart: unless-stopped

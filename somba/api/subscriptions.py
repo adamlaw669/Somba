@@ -31,23 +31,12 @@ from somba.db.models import (
     SubscriptionStatus,
 )
 from somba.db.session import get_db
+from somba.subscriptions.period import next_period_end as _next_period_end
 from somba.subscriptions.proration import calculate as calc_proration
 from somba.workers.reconcile.writer import write_intent
 
 router = APIRouter(prefix="/v1/subscriptions", tags=["subscriptions"])
 log = logging.getLogger(__name__)
-
-_INTERVAL_DAYS: dict[str, int] = {
-    "day": 1,
-    "week": 7,
-    "month": 30,
-    "year": 365,
-}
-
-
-def _next_period_end(interval: str, interval_count: int, start: datetime) -> datetime:
-    days = _INTERVAL_DAYS.get(interval, 30) * interval_count
-    return start + timedelta(days=days)
 
 
 def _sub_to_dict(sub: Subscription) -> dict:

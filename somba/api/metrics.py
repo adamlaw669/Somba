@@ -14,6 +14,7 @@ from somba.db.models import (
     OutboxEvent,
     OutboxEventStatus,
     Subscription,
+    SubscriptionEvent,
     SubscriptionStatus,
 )
 from somba.db.session import get_db
@@ -54,11 +55,32 @@ def get_metrics(
         )
     )
 
+    # recovery_rate: of every time a subscription entered past_due, what
+    # fraction eventually recovered back to active (healed by a settlement,
+    # verify pass, or a later successful charge)?
+    past_due_total = db.scalar(
+        select(func.count()).select_from(SubscriptionEvent).where(
+            SubscriptionEvent.to_status == SubscriptionStatus.past_due.value,
+            SubscriptionEvent.merchant_id == mid,
+        )
+    )
+    past_due_healed = db.scalar(
+        select(func.count()).select_from(SubscriptionEvent).where(
+            SubscriptionEvent.from_status == SubscriptionStatus.past_due.value,
+            SubscriptionEvent.to_status == SubscriptionStatus.active.value,
+            SubscriptionEvent.merchant_id == mid,
+        )
+    )
+    recovery_rate = (past_due_healed / past_due_total) if past_due_total else None
+
     return {
         "metrics": {
             "pending_intents": pending_intents,
             "payment_uncertain_subscriptions": payment_uncertain,
             "outbox_pending_events": outbox_pending,
             "active_subscriptions": active_subs,
+            "past_due_total": past_due_total,
+            "past_due_healed": past_due_healed,
+            "recovery_rate": recovery_rate,
         }
     }

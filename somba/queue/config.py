@@ -17,3 +17,7 @@ NUM_PARTITIONS = 12
 
 # Single-node Redpanda in dev → one replica. (Prod would bump this.)
 REPLICATION_FACTOR = 1
+
+# Consumer group that drains billing events (emitter/relay downstream
+# consumers). Used by the queue_depth alert to watch for growing lag.
+BILLING_CONSUMER_GROUP = os.getenv("BILLING_CONSUMER_GROUP", "somba-billing")

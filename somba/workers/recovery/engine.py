@@ -18,13 +18,16 @@ from typing import Literal
 from sqlalchemy.orm import Session
 
 from somba.db.models import (
+    Customer,
     FailureClass,
     OutboxEvent,
     OutboxEventStatus,
     RecoverySchedule,
     RecoveryScheduleReasonClass,
     RecoveryScheduleStatus,
+    Subscription,
 )
+from somba.nomba import client as nomba_client
 
 log = logging.getLogger(__name__)
 
@@ -84,27 +87,62 @@ def run(
         )
 
     else:  # transfer
+        payload: dict = {
+            "subscription_id": subscription_id,
+            "invoice_id": invoice_id,
+            "charge_attempt_id": charge_attempt_id,
+            "failure_class": failure_class.value,
+        }
+        va = _ensure_virtual_account(db, subscription_id=subscription_id)
+        if va:
+            payload["virtual_account"] = va
+
         db.add(OutboxEvent(
             merchant_id=merchant_id,
             aggregate_type="subscription",
             aggregate_id=str(subscription_id),
             event_type="subscription.transfer_required",
-            payload={
-                "subscription_id": subscription_id,
-                "invoice_id": invoice_id,
-                "charge_attempt_id": charge_attempt_id,
-                "failure_class": failure_class.value,
-            },
+            payload=payload,
             partition_key=str(subscription_id),
             status=OutboxEventStatus.pending,
         ))
         log.info(
-            "recovery.engine: transfer path sub=%d failure_class=%s",
+            "recovery.engine: transfer path sub=%d failure_class=%s va=%s",
             subscription_id,
             failure_class.value,
+            bool(va),
         )
 
     return action
+
+
+def _ensure_virtual_account(db: Session, *, subscription_id: int) -> dict | None:
+    """Issue (or reuse) a virtual account so the customer can push a manual
+    transfer. Returns account details for the webhook payload, or None if the
+    subscription/customer can't be resolved or Nomba VA creation fails --
+    callers must still emit the transfer_required event either way; a missing
+    VA just means the merchant follows up manually.
+    """
+    sub = db.get(Subscription, subscription_id)
+    if sub is None:
+        return None
+    customer = db.get(Customer, sub.customer_id)
+    if customer is None:
+        return None
+
+    if customer.va_account_no:
+        return {"account_number": customer.va_account_no}
+
+    account_name = customer.name if customer.name and len(customer.name) >= 8 else f"Somba Customer {customer.id}"
+    try:
+        result = nomba_client.create_virtual_account(customer_name=account_name)
+    except Exception:  # noqa: BLE001
+        log.exception("recovery.engine: virtual account creation failed sub=%d", subscription_id)
+        return None
+
+    customer.va_account_no = result.account_number
+    customer.va_id = result.account_holder_id
+    return {"account_number": result.account_number, "bank_name": result.bank_name}
 
 
 def _select_action(failure_class: FailureClass, attempt_number: int) -> Action:

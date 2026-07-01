@@ -26,6 +26,7 @@ VALID_TRANSITIONS: dict[SubscriptionStatus, frozenset[SubscriptionStatus]] = {
     }),
     SubscriptionStatus.active: frozenset({
         SubscriptionStatus.past_due,
+        SubscriptionStatus.payment_uncertain,
         SubscriptionStatus.paused,
         SubscriptionStatus.cancelled,
         SubscriptionStatus.expired,
