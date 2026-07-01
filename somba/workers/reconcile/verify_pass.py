@@ -83,6 +83,15 @@ def _resolve_attempt(
         result.status.value,
     )
 
+    # ChargeAttempt.order_reference is attempt-specific (each attempt gets its
+    # own, so retries don't collide on the DB's unique constraint) and won't
+    # string-match LedgerIntent.order_reference. Look the intent up via the
+    # FK verify_pass's own queue depends on (_handle_uncertain always sets
+    # it) instead of by reference.
+    intent: LedgerIntent | None = db.scalar(
+        select(LedgerIntent).where(LedgerIntent.charge_attempt_id == attempt.id)
+    )
+
     if result.status == NombaChargeStatus.uncertain:
         # Nomba still doesn't know — leave it and try again on the next pass
         log.info("verify_pass: still uncertain order=%s — deferred", attempt.order_reference)
@@ -92,7 +101,7 @@ def _resolve_attempt(
         res = write_settlement(
             db,
             merchant_id=attempt.merchant_id,
-            order_reference=attempt.order_reference,
+            order_reference=intent.order_reference if intent else attempt.order_reference,
             transaction_ref=result.transaction_id or f"verify-{attempt.order_reference}",
             amount_kobo=attempt.amount,
             source=LedgerSettlementSource.verify_pass,
@@ -114,12 +123,6 @@ def _resolve_attempt(
     failure_class = classify(result.response_code, result.failure_reason)
     attempt.failure_class = failure_class
 
-    # Mark the intent unmatched
-    intent: LedgerIntent | None = db.scalar(
-        select(LedgerIntent).where(
-            LedgerIntent.order_reference == attempt.order_reference
-        )
-    )
     if intent:
         intent.status = LedgerIntentStatus.unmatched
 

@@ -32,6 +32,7 @@ from somba.db.models import (
 from somba.nomba import client as nomba_client
 from somba.nomba.client import NombaChargeStatus
 from somba.scheduler.billing_sweep import acquire_billing_lock, fetch_due_subscriptions
+from somba.subscriptions.period import next_period_end
 from somba.subscriptions.state_machine import transition
 from somba.workers.recovery.classifier import classify
 from somba.workers.recovery.engine import run as recovery_run
@@ -159,10 +160,21 @@ def _execute_one(
         log.debug("charge_worker.execute: attempt already exists sub=%d key=%s", sub.id, idem_key)
         return
 
+    _log_billing_lag(sub, now)
+
+    # ChargeAttempt.order_reference is unique per-row, but intent.order_reference
+    # is fixed for the intent's whole lifetime -- reusing it verbatim would
+    # collide on any second attempt (a retry, or reprocessing after
+    # "uncertain") with a UniqueViolation, silently aborting the whole
+    # execute_pending() batch. Suffix by attempt_number so every attempt gets
+    # its own row while still being traceable back to the parent intent.
+    attempt_order_ref = f"{intent.order_reference}-{attempt_number}"
+
     if not customer.mandate_id:
         log.warning("charge_worker.execute: no mandate_id for customer=%d sub=%d", customer.id, sub.id)
         _handle_failure(db, intent=intent, sub=sub, invoice=invoice, attempt_number=attempt_number,
-                        idem_key=idem_key, reason="no_mandate_id", code=None, now=now)
+                        idem_key=idem_key, order_reference=attempt_order_ref,
+                        reason="no_mandate_id", code=None, now=now)
         return
 
     # Call Nomba direct debit
@@ -176,22 +188,22 @@ def _execute_one(
         result.status.value,
         sub.id,
         attempt_number,
-        intent.order_reference,
+        attempt_order_ref,
     )
 
     if result.status == NombaChargeStatus.succeeded:
         _handle_success(db, intent=intent, sub=sub, invoice=invoice,
-                        attempt_number=attempt_number, idem_key=idem_key,
+                        attempt_number=attempt_number, idem_key=idem_key, order_reference=attempt_order_ref,
                         transaction_id=result.transaction_id, now=now)
 
     elif result.status == NombaChargeStatus.failed:
         _handle_failure(db, intent=intent, sub=sub, invoice=invoice,
-                        attempt_number=attempt_number, idem_key=idem_key,
+                        attempt_number=attempt_number, idem_key=idem_key, order_reference=attempt_order_ref,
                         reason=result.failure_reason, code=result.response_code, now=now)
 
     else:  # uncertain
         _handle_uncertain(db, intent=intent, sub=sub,
-                          attempt_number=attempt_number, idem_key=idem_key,
+                          attempt_number=attempt_number, idem_key=idem_key, order_reference=attempt_order_ref,
                           reason=result.failure_reason, now=now)
 
 
@@ -203,6 +215,7 @@ def _handle_success(
     invoice: Invoice,
     attempt_number: int,
     idem_key: str,
+    order_reference: str,
     transaction_id: str | None,
     now: datetime,
 ) -> None:
@@ -211,7 +224,7 @@ def _handle_success(
         subscription_id=sub.id,
         invoice_id=invoice.id,
         idempotency_key=idem_key,
-        order_reference=intent.order_reference,
+        order_reference=order_reference,
         amount=intent.amount,
         status=ChargeAttemptStatus.succeeded,
         attempt_number=attempt_number,
@@ -240,8 +253,19 @@ def _handle_success(
     if sub.status in (SubscriptionStatus.past_due, SubscriptionStatus.trialing):
         transition(sub, SubscriptionStatus.active, SubscriptionEventTrigger.scheduler, db,
                    metadata={"charge_attempt_id": attempt.id})
-    elif sub.status == SubscriptionStatus.active:
-        pass  # already active; just let the period advance
+
+    # Advance to the next billing period -- but only for a regular billing
+    # invoice. A proration invoice bills a mid-cycle top-up on the CURRENT
+    # period and must not move it. Without this, next_bill_date never
+    # changes: the subscription is picked up as "due" again the very next
+    # day, and the second attempt crashes outright on
+    # uq_invoices_subscription_period_start (same period_start, same sub).
+    if invoice.type == InvoiceType.regular:
+        plan: Plan = db.get(Plan, sub.plan_id)
+        new_period_start = sub.current_period_end or now
+        sub.current_period_start = new_period_start
+        sub.current_period_end = next_period_end(plan.interval, plan.interval_count, new_period_start)
+        sub.next_bill_date = sub.current_period_end
 
     db.add(_outbox(
         merchant_id=sub.merchant_id,
@@ -266,6 +290,7 @@ def _handle_failure(
     invoice: Invoice,
     attempt_number: int,
     idem_key: str,
+    order_reference: str,
     reason: str | None,
     code: str | None,
     now: datetime,
@@ -277,7 +302,7 @@ def _handle_failure(
         subscription_id=sub.id,
         invoice_id=invoice.id,
         idempotency_key=idem_key,
-        order_reference=intent.order_reference,
+        order_reference=order_reference,
         amount=intent.amount,
         status=ChargeAttemptStatus.failed,
         failure_reason=reason,
@@ -333,6 +358,7 @@ def _handle_uncertain(
     sub: Subscription,
     attempt_number: int,
     idem_key: str,
+    order_reference: str,
     reason: str | None,
     now: datetime,
 ) -> None:
@@ -341,7 +367,7 @@ def _handle_uncertain(
         subscription_id=sub.id,
         invoice_id=intent.invoice_id,
         idempotency_key=idem_key,
-        order_reference=intent.order_reference,
+        order_reference=order_reference,
         amount=intent.amount,
         status=ChargeAttemptStatus.uncertain,
         failure_reason=reason,
@@ -353,7 +379,13 @@ def _handle_uncertain(
     intent.charge_attempt_id = attempt.id
     # Keep intent as pending so the verify pass can resolve it later
 
-    if sub.status in (SubscriptionStatus.active, SubscriptionStatus.trialing, SubscriptionStatus.past_due):
+    if sub.status == SubscriptionStatus.trialing:
+        # payment_uncertain is only reachable from active/past_due — a charge
+        # attempt means the trial is effectively over, so land on active first.
+        transition(sub, SubscriptionStatus.active, SubscriptionEventTrigger.scheduler, db,
+                   metadata={"charge_attempt_id": attempt.id})
+
+    if sub.status in (SubscriptionStatus.active, SubscriptionStatus.past_due):
         transition(sub, SubscriptionStatus.payment_uncertain, SubscriptionEventTrigger.scheduler, db,
                    metadata={"charge_attempt_id": attempt.id, "reason": reason})
 
@@ -386,6 +418,19 @@ def _outbox(*, merchant_id: int, aggregate_id: str, event_type: str, payload: di
 # ---------------------------------------------------------------------------
 # Shared helpers
 # ---------------------------------------------------------------------------
+
+
+def _log_billing_lag(sub: Subscription, now: datetime) -> None:
+    """Log the delay between when a subscription came due and this attempt.
+
+    Surfaces scheduler/worker backlog: a growing lag means due subscriptions
+    are sitting around before being charged.
+    """
+    if sub.next_bill_date is None:
+        return
+    next_bill = sub.next_bill_date if sub.next_bill_date.tzinfo else sub.next_bill_date.replace(tzinfo=timezone.utc)
+    lag_seconds = (now - next_bill).total_seconds()
+    log.info("billing_lag_seconds sub=%d lag_seconds=%.1f", sub.id, lag_seconds)
 
 
 def _get_or_create_open_invoice(db: Session, sub: Subscription, cutoff: datetime) -> Invoice:

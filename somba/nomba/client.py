@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 import os
 import time
+import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from enum import Enum
@@ -67,7 +68,18 @@ def _base_url() -> str:
 
 
 def _account_id() -> str:
+    """Sub-account ID — scopes resource calls (mandates, debits, VAs, verify)."""
     return os.environ.get("NOMBA_ACCOUNT_ID", "")
+
+
+def _parent_account_id() -> str:
+    """Parent (main) account ID — required on token issue/refresh.
+
+    Per Nomba's onboarding instructions: authenticate with the parent
+    account, then scope subsequent resource calls to the sub-account. Falls
+    back to NOMBA_ACCOUNT_ID for setups with no separate sub-account.
+    """
+    return os.environ.get("NOMBA_PARENT_ACCOUNT_ID") or _account_id()
 
 
 def _get_token(base_url: str | None = None) -> str:
@@ -99,7 +111,7 @@ def _issue(base_url: str) -> str:
         resp = client.post(
             f"{base_url}/v1/auth/token/issue",
             json={"grant_type": "client_credentials", "client_id": client_id, "client_secret": client_secret},
-            headers={"accountId": _account_id(), "Content-Type": "application/json"},
+            headers={"accountId": _parent_account_id(), "Content-Type": "application/json"},
         )
     resp.raise_for_status()
     data = resp.json()["data"]
@@ -119,7 +131,7 @@ def _refresh(base_url: str, refresh_token: str) -> str:
         resp = client.post(
             f"{base_url}/v1/auth/token/refresh",
             json={"refresh_token": refresh_token},
-            headers={"accountId": _account_id(), "Content-Type": "application/json"},
+            headers={"accountId": _parent_account_id(), "Content-Type": "application/json"},
         )
     resp.raise_for_status()
     data = resp.json()["data"]
@@ -150,24 +162,52 @@ def _numeric_reference() -> str:
 # ---------------------------------------------------------------------------
 
 
+@dataclass
+class VirtualAccountResult:
+    account_number: str
+    bank_name: str
+    account_holder_id: str
+    account_ref: str
+
+
 def create_virtual_account(
     *,
     customer_name: str,
     base_url: str | None = None,
-) -> str:
-    """Create a virtual account and return the bank account number."""
+) -> VirtualAccountResult:
+    """Create a virtual account scoped to our sub-account, return its details.
+
+    Sub-account VA creation is a *parent*-account operation: it POSTs to
+    /v1/accounts/virtual/{subAccountId} with the PARENT account ID in the
+    accountId header (unlike every other resource call, which is scoped to
+    the sub-account) -- confirmed against the live API; the sub-account-only
+    header returns a bare 403 with no other explanation.
+    """
     url = base_url or _base_url()
+    sub_account_id = _account_id()
     import httpx
+
+    headers = {
+        "Authorization": f"Bearer {_get_token(url)}",
+        "accountId": _parent_account_id(),
+        "Content-Type": "application/json",
+    }
+    account_ref = f"va-{uuid.uuid4().hex}"
 
     with httpx.Client(timeout=30) as client:
         resp = client.post(
-            f"{url}/v1/accounts/virtual",
-            json={"accountName": customer_name},
-            headers=_headers(url),
+            f"{url}/v1/accounts/virtual/{sub_account_id}",
+            json={"accountRef": account_ref, "accountName": customer_name},
+            headers=headers,
         )
     resp.raise_for_status()
-    body = resp.json()
-    return body["data"]["bankAccountNumber"]
+    data = resp.json()["data"]
+    return VirtualAccountResult(
+        account_number=data["bankAccountNumber"],
+        bank_name=data.get("bankName", ""),
+        account_holder_id=data.get("accountHolderId", ""),
+        account_ref=data.get("accountRef", account_ref),
+    )
 
 
 # ---------------------------------------------------------------------------
