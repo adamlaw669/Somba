@@ -8,6 +8,7 @@ from apscheduler.schedulers.blocking import BlockingScheduler
 
 from somba.db.session import SessionLocal
 from somba.scheduler.billing_sweep import emit_due_billing_events
+from somba.scheduler.reconciliation_triggers import reconcile_sweep_tick, verify_pass_tick
 from somba.observability.alerts import check_pending_intents, PaymentUncertainMonitor
 
 
@@ -75,7 +76,23 @@ def build_scheduler() -> BlockingScheduler:
         max_instances=1,
         coalesce=True,
     )
-    
+    scheduler.add_job(
+        reconcile_sweep_tick,
+        trigger="interval",
+        minutes=5,
+        id="reconcile_sweep",
+        max_instances=1,
+        coalesce=True,
+    )
+    scheduler.add_job(
+        verify_pass_tick,
+        trigger="interval",
+        minutes=5,
+        id="verify_pass",
+        max_instances=1,
+        coalesce=True,
+    )
+
     return scheduler
 
 
