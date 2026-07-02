@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Archivo, Hanken_Grotesk, JetBrains_Mono } from "next/font/google";
+import { Providers } from "@/components/Providers";
 import "./globals.css";
 
 const archivo = Archivo({
@@ -34,7 +35,7 @@ export default function RootLayout({
       <body
         className={`${archivo.variable} ${hanken.variable} ${jetbrains.variable} min-h-screen`}
       >
-        {children}
+        <Providers>{children}</Providers>
       </body>
     </html>
   );

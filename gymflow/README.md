@@ -12,11 +12,24 @@ fallback to a dedicated account), and the membership heals itself back to active
 
 - Next.js 16 (App Router) + React 19 + TypeScript
 - Tailwind CSS v4
-- Zustand for the in-memory store that mocks the Somba API
+- Zustand store that talks to the live Somba API (or a built-in local mock)
 
-The mock API (`lib/store.ts`) mirrors Somba's data model and event shapes, so it
-can be swapped for the live API later by changing only the data source — not the
-screens.
+## Live vs. local mode
+
+GymFlow runs against the **live Somba API** when `SOMBA_API_KEY` is set, and
+falls back to a **local mock** otherwise — the header shows which one is active.
+
+- Copy `.env.example` to `.env.local` and set `SOMBA_API_KEY` (create a merchant
+  via `POST /v1/merchants` on your Somba instance to get one — it's shown once).
+- The browser never sees the key: it calls our own `/api/somba/*` route handlers
+  (`app/api/somba/`), which proxy to Somba using the server-side key and add the
+  `Authorization` + `Idempotency-Key` headers.
+- **Live** covers everything the API exposes: plans, sign-up (create customer +
+  subscription), status, invoices, the real webhook/outbox event feed, and
+  plan changes with real proration returned by Somba.
+- The API doesn't expose pause/resume/cancel/retry/transfer/verify triggers yet
+  (those run server-side off the scheduler + Nomba webhooks), so those recovery
+  transitions in the demo cockpit are simulated locally and clearly labelled.
 
 ## Screens
 

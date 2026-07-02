@@ -15,6 +15,7 @@ const CHARGE_TONE: Record<string, string> = {
 };
 
 export default function BillingPage() {
+  const mode = useDemo((s) => s.mode);
   const invoices = useDemo((s) => s.invoices);
   const charges = useDemo((s) => s.charges);
   const sub = useDemo((s) => s.subscription)!;
@@ -116,7 +117,9 @@ export default function BillingPage() {
       <Card className="overflow-x-auto">
         {charges.length === 0 ? (
           <div className="p-10 text-center text-sm text-smoke">
-            No charge attempts yet.
+            {mode === "live"
+              ? "No charge attempts yet. Somba records these in its ledger when the scheduler bills this subscription."
+              : "No charge attempts yet."}
           </div>
         ) : (
           <table className="w-full text-sm min-w-[640px]">

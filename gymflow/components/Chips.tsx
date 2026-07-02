@@ -1,4 +1,4 @@
-import type { InvoiceStatus, WebhookEventType } from "@/lib/types";
+import type { InvoiceStatus } from "@/lib/types";
 
 const INVOICE_CHIP: Record<InvoiceStatus, { label: string; cls: string }> = {
   paid: { label: "Paid", cls: "bg-volt text-ink border-ink/10" },
@@ -23,7 +23,7 @@ export function InvoiceChip({ status }: { status: InvoiceStatus }) {
 }
 
 // Event feed dot colour by family of event.
-function eventTone(type: WebhookEventType): string {
+function eventTone(type: string): string {
   if (type.includes("succeeded") || type.includes("recovered") || type === "subscription.active" || type === "payment.resolved" || type === "transfer.reconciled")
     return "bg-volt";
   if (type.includes("failed") || type === "anomaly.detected") return "bg-danger";
@@ -33,6 +33,6 @@ function eventTone(type: WebhookEventType): string {
   return "bg-smoke";
 }
 
-export function EventDot({ type }: { type: WebhookEventType }) {
+export function EventDot({ type }: { type: string }) {
   return <span className={`h-2 w-2 rounded-full ${eventTone(type)}`} aria-hidden />;
 }

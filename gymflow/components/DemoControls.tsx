@@ -6,7 +6,13 @@ import type { SubscriptionStatus } from "@/lib/types";
 
 // The demo cockpit: trigger every interesting billing scenario and watch the
 // membership react. Clearly marked as simulation so it's never mistaken for UI.
-export function DemoControls({ status }: { status: SubscriptionStatus }) {
+export function DemoControls({
+  status,
+  live = false,
+}: {
+  status: SubscriptionStatus;
+  live?: boolean;
+}) {
   const router = useRouter();
   const d = useDemo();
 
@@ -53,8 +59,10 @@ export function DemoControls({ status }: { status: SubscriptionStatus }) {
         </button>
       </div>
       <p className="text-sm text-paper/60 mb-5 max-w-xl">
-        Drive the membership through Somba&apos;s lifecycle. Each action fires real
-        webhook events into the{" "}
+        Drive the membership through Somba&apos;s lifecycle.{" "}
+        {live
+          ? "These recovery transitions are simulated locally — the live API doesn't expose them yet — and stream into the "
+          : "Each action fires webhook events into the "}
         <a href="/events" className="text-volt underline-offset-2 hover:underline">
           event viewer
         </a>

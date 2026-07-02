@@ -17,6 +17,7 @@ export function SiteHeader() {
   const hydrated = useHydrated();
   const hasSub = useDemo((s) => s.subscription !== null);
   const eventCount = useDemo((s) => s.events.length);
+  const mode = useDemo((s) => s.mode);
 
   return (
     <header className="sticky top-0 z-40 border-b border-concrete-2 bg-paper/85 backdrop-blur">
@@ -55,9 +56,20 @@ export function SiteHeader() {
         )}
 
         <div className="flex items-center gap-2">
-          <span className="hidden sm:flex items-center gap-1.5 kicker text-smoke-2">
-            <span className="h-1.5 w-1.5 rounded-full bg-volt live-dot" />
-            Powered by Somba
+          <span
+            className="hidden sm:flex items-center gap-1.5 kicker text-smoke-2"
+            title={
+              hydrated && mode === "live"
+                ? "Connected to the live Somba API"
+                : "Running on a local mock of the Somba API"
+            }
+          >
+            <span
+              className={`h-1.5 w-1.5 rounded-full live-dot ${
+                hydrated && mode === "live" ? "bg-volt" : "bg-rest"
+              }`}
+            />
+            {hydrated && mode === "live" ? "Live · Somba" : "Demo · Somba"}
           </span>
         </div>
       </div>

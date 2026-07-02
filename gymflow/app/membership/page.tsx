@@ -19,8 +19,13 @@ export default function MembershipPage() {
   const pause = useDemo((s) => s.pause);
   const resume = useDemo((s) => s.resume);
   const cancel = useDemo((s) => s.cancel);
+  const mode = useDemo((s) => s.mode);
+  const syncing = useDemo((s) => s.syncing);
+  const refresh = useDemo((s) => s.refresh);
+  const lastProration = useDemo((s) => s.lastProration);
   const [showChange, setShowChange] = useState(false);
   const [confirmCancel, setConfirmCancel] = useState(false);
+  const live = mode === "live";
 
   const plan = planById(sub.plan_id);
   const meta = STATE_META[sub.status];
@@ -40,6 +45,35 @@ export default function MembershipPage() {
         </div>
         <StateBadge status={sub.status} size="lg" />
       </div>
+
+      {live && (
+        <div className="mt-5 rounded-xl border border-volt-deep/30 bg-volt/10 px-4 py-3 flex flex-wrap items-center justify-between gap-3">
+          <p className="text-sm text-ink">
+            <span className="font-semibold">Connected to the live Somba API.</span>{" "}
+            Your plan, status, invoices and events are real. Recovery actions in
+            the cockpit below are simulated — the API doesn&apos;t expose those
+            triggers yet.
+          </p>
+          <Button variant="dark" onClick={() => refresh()} disabled={syncing}>
+            {syncing ? "Syncing…" : "Sync from Somba"}
+          </Button>
+        </div>
+      )}
+
+      {live && lastProration && (
+        <Card className="mt-4 p-4 border-l-4 border-l-volt">
+          <p className="kicker text-smoke">Last plan change · real proration from Somba</p>
+          <p className="mt-1.5 text-sm text-ink">
+            {lastProration.action === "credit" ? "Credited " : "Charged "}
+            <span className="font-semibold">
+              {naira(Math.abs(lastProration.net_kobo))}
+            </span>{" "}
+            — {lastProration.remaining_days} of {lastProration.total_days} days
+            remaining (credit {naira(lastProration.credit_kobo)}, charge{" "}
+            {naira(lastProration.charge_kobo)}).
+          </p>
+        </Card>
+      )}
 
       <div className="mt-8 grid lg:grid-cols-[0.95fr_1.05fr] gap-6 items-start">
         {/* left: the pass + facts */}
@@ -150,7 +184,7 @@ export default function MembershipPage() {
       </div>
 
       <div className="mt-8">
-        <DemoControls status={sub.status} />
+        <DemoControls status={sub.status} live={live} />
       </div>
 
       {showChange && <ChangePlanDialog onClose={() => setShowChange(false)} />}

@@ -9,6 +9,8 @@ import { Button } from "./ui";
 export function ChangePlanDialog({ onClose }: { onClose: () => void }) {
   const subscription = useDemo((s) => s.subscription)!;
   const changePlan = useDemo((s) => s.changePlan);
+  const live = useDemo((s) => s.mode === "live");
+  const syncing = useDemo((s) => s.syncing);
   const current = planById(subscription.plan_id)!;
   const [target, setTarget] = useState(
     PLANS.find((p) => p.id !== current.id)!.id,
@@ -29,9 +31,12 @@ export function ChangePlanDialog({ onClose }: { onClose: () => void }) {
     daysRemaining,
   );
 
-  const confirm = () => {
-    changePlan(target);
-    onClose();
+  const confirm = async () => {
+    try {
+      await changePlan(target);
+    } finally {
+      onClose();
+    }
   };
 
   return (
@@ -98,17 +103,19 @@ export function ChangePlanDialog({ onClose }: { onClose: () => void }) {
           </div>
         </div>
         <p className="mt-2 text-xs text-smoke-2">
-          {net >= 0
-            ? "Only the difference moves. Your billing date stays the same."
-            : "A downgrade — the credit is banked against your next renewal."}
+          {live
+            ? "Estimate — Somba calculates the exact proration to the day when you confirm."
+            : net >= 0
+              ? "Only the difference moves. Your billing date stays the same."
+              : "A downgrade — the credit is banked against your next renewal."}
         </p>
 
         <div className="mt-6 flex gap-3">
-          <Button variant="ghost" onClick={onClose} className="flex-1">
+          <Button variant="ghost" onClick={onClose} className="flex-1" disabled={syncing}>
             Cancel
           </Button>
-          <Button variant="primary" onClick={confirm} className="flex-1">
-            Switch to {newPlan.name}
+          <Button variant="primary" onClick={confirm} className="flex-1" disabled={syncing}>
+            {syncing ? "Switching…" : `Switch to ${newPlan.name}`}
           </Button>
         </div>
       </div>
