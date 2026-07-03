@@ -10,10 +10,11 @@ async function parseJson(res) {
   }
 }
 
-async function request(path, { method = 'GET', body, auth } = {}) {
+async function request(path, { method = 'GET', body, auth, idempotent } = {}) {
   const headers = {}
   if (body) headers['Content-Type'] = 'application/json'
   if (auth) headers.Authorization = `Bearer ${auth}`
+  if (idempotent) headers['Idempotency-Key'] = crypto.randomUUID()
 
   const res = await fetch(`${API_BASE}${path}`, {
     method,
@@ -61,4 +62,17 @@ export function createApiKey(sessionToken, name) {
 
 export function revokeApiKey(sessionToken, keyRowId) {
   return request(`/v1/auth/api-keys/${keyRowId}`, { method: 'DELETE', auth: sessionToken })
+}
+
+export function sandboxCheckAuth(apiKey) {
+  return request('/v1/sandbox/nomba/auth', { method: 'POST', auth: apiKey, idempotent: true })
+}
+
+export function sandboxCreateVirtualAccount(apiKey, customerName) {
+  return request('/v1/sandbox/nomba/virtual-account', {
+    method: 'POST',
+    auth: apiKey,
+    idempotent: true,
+    body: { customer_name: customerName },
+  })
 }

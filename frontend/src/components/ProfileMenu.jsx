@@ -56,6 +56,13 @@ export default function ProfileMenu() {
           >
             API keys
           </Link>
+          <Link
+            to="/sandbox"
+            onClick={() => setOpen(false)}
+            className="block px-4 py-2.5 font-mono text-[13px] text-text transition-colors hover:bg-panel-2"
+          >
+            Sandbox
+          </Link>
           <button
             type="button"
             onClick={onLogout}

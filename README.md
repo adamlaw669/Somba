@@ -44,12 +44,13 @@ It shows the entry points, the outbox, relay shards, event queues, workers, the 
 
 - [PRD.md](./PRD.md) describes the product in plain English
 - [docs/](./docs/) contains the supporting documentation pages
-- [somba/](./somba/) is the placeholder Python package structure
-- [tests/](./tests/) is the placeholder test structure
-- [scripts/](./scripts/) contains developer helper stubs
+- [somba/](./somba/) is the FastAPI application: API routers, background workers (charge, recovery, reconciliation sweep, verify pass), the Nomba client, and the Alembic migrations
+- [tests/](./tests/) is the real test suite (unit + integration)
+- [scripts/](./scripts/) contains developer helper scripts (topic setup, demo seeding)
+- [frontend/](./frontend/) is the React + Vite docs site and landing page — includes the interactive API docs, a dashboard (email/password auth, named API keys), and a sandbox page for testing the Nomba integration without touching live credentials
 
-## Notes
+## Status
 
-This repository is still at scaffold stage. The current files are documentation and placeholders only, so the next step is implementation once the product shape is finalized.
+Somba is implemented and running. The API is live at `https://somba-jade.vercel.app`, backed by Postgres and a Redpanda-based outbox relay, with a full test suite (unit + integration) passing in CI. The docs above describe the design; the code is the current source of truth for exact request/response shapes.
 
 > Somba by Team setld
