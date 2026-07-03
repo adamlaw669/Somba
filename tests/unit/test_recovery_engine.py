@@ -131,9 +131,7 @@ def test_transfer_path_writes_no_recovery_schedule(db):
 
 
 def _make_real_subscription(db, *, customer_name: str | None = "Real Customer") -> Subscription:
-    merchant = Merchant(
-        name="M", api_key_id="k" * 16, api_key_hash="h", webhook_secret="s",
-    )
+    merchant = Merchant(name="M", webhook_secret="s")
     db.add(merchant)
     db.flush()
     plan = Plan(merchant_id=merchant.id, name="P", amount=1000, currency="NGN", interval="month")

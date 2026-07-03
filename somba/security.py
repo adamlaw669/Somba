@@ -8,6 +8,7 @@ from dataclasses import dataclass
 import bcrypt
 
 API_KEY_PREFIX = "sk-somba-"
+SESSION_TOKEN_PREFIX = "sess-somba-"
 
 
 @dataclass(frozen=True)
@@ -63,3 +64,58 @@ def verify_api_key_secret(secret: str, secret_hash: str) -> bool:
         return bcrypt.checkpw(secret.encode("utf-8"), secret_hash.encode("utf-8"))
     except ValueError:
         return False
+
+
+def hash_password(password: str) -> str:
+    """Hash a merchant dashboard password with bcrypt."""
+
+    return bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
+
+
+def verify_password(password: str, password_hash: str) -> bool:
+    """Check a merchant dashboard password against its stored bcrypt hash."""
+
+    try:
+        return bcrypt.checkpw(password.encode("utf-8"), password_hash.encode("utf-8"))
+    except ValueError:
+        return False
+
+
+@dataclass(frozen=True)
+class SessionTokenMaterial:
+    """Convenience container for a generated dashboard session token."""
+
+    session_id: str
+    secret: str
+    token: str
+    secret_hash: str
+
+
+def generate_session_token() -> SessionTokenMaterial:
+    """Generate a dashboard session token (separate credential from API keys)."""
+
+    session_id = secrets.token_hex(8)
+    secret = secrets.token_urlsafe(32)
+    token = f"{SESSION_TOKEN_PREFIX}{session_id}.{secret}"
+    return SessionTokenMaterial(
+        session_id=session_id,
+        secret=secret,
+        token=token,
+        secret_hash=hash_api_key_secret(secret),
+    )
+
+
+def parse_session_token(token: str) -> tuple[str, str]:
+    """Split a session bearer token into session id and secret."""
+
+    if not token.startswith(SESSION_TOKEN_PREFIX):
+        raise ValueError("Session token must start with sess-somba-")
+
+    body = token[len(SESSION_TOKEN_PREFIX) :]
+    if "." not in body:
+        raise ValueError("Session token must include a session id and secret")
+
+    session_id, secret = body.split(".", 1)
+    if not session_id or not secret:
+        raise ValueError("Session token is missing a session id or secret")
+    return session_id, secret
