@@ -18,6 +18,7 @@ from somba.api.metrics import router as metrics_router
 from somba.api.middleware.auth import get_current_merchant
 from somba.api.middleware.idempotency import IdempotencyMiddleware
 from somba.api.plans import router as plans_router
+from somba.api.sandbox import router as sandbox_router
 from somba.api.subscriptions import router as subscriptions_router
 from somba.api.webhooks import router as webhooks_router
 from somba.db.models import Merchant
@@ -39,6 +40,7 @@ app.include_router(subscriptions_router)
 app.include_router(invoices_router)
 app.include_router(events_router)
 app.include_router(metrics_router)
+app.include_router(sandbox_router)
 
 
 @app.on_event("startup")

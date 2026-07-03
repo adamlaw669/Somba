@@ -3,6 +3,7 @@ import Landing from './pages/Landing'
 import Signup from './pages/Signup'
 import Login from './pages/Login'
 import ApiKeys from './pages/ApiKeys'
+import Sandbox from './pages/Sandbox'
 import DocsLayout from './layouts/DocsLayout'
 
 import Introduction from './pages/docs/Introduction'
@@ -41,6 +42,7 @@ export default function App() {
       <Route path="/signup" element={<Signup />} />
       <Route path="/login" element={<Login />} />
       <Route path="/api-keys" element={<ApiKeys />} />
+      <Route path="/sandbox" element={<Sandbox />} />
 
       <Route path="/docs" element={<DocsLayout />}>
         <Route index element={<Navigate to="/docs/introduction" replace />} />
