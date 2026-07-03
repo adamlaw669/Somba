@@ -24,7 +24,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import Response
 
 from somba.api.errors import APIError, error_response
-from somba.db.models import IdempotencyRecord, IdempotencyRecordStatus, Merchant
+from somba.db.models import ApiKey, IdempotencyRecord, IdempotencyRecordStatus
 from somba.db.session import get_db
 from somba.security import parse_api_key, verify_api_key_secret
 
@@ -32,13 +32,17 @@ log = logging.getLogger(__name__)
 
 MUTATING_METHODS = {"POST", "PUT", "PATCH", "DELETE"}
 IDEMPOTENCY_EXEMPT = {"/v1/webhooks/nomba"}
+IDEMPOTENCY_EXEMPT_PREFIXES = ("/v1/auth/",)
 
 
 class IdempotencyMiddleware(BaseHTTPMiddleware):
     """Require an idempotency key and replay stored responses on repeat keys."""
 
     async def dispatch(self, request: Request, call_next):
-        if request.method not in MUTATING_METHODS or request.url.path in IDEMPOTENCY_EXEMPT:
+        exempt = request.url.path in IDEMPOTENCY_EXEMPT or request.url.path.startswith(
+            IDEMPOTENCY_EXEMPT_PREFIXES
+        )
+        if request.method not in MUTATING_METHODS or exempt:
             return await call_next(request)
 
         key = request.headers.get("Idempotency-Key", "").strip()
@@ -179,10 +183,12 @@ class IdempotencyMiddleware(BaseHTTPMiddleware):
             return None
         db, gen = self._session(request)
         try:
-            merchant = db.scalar(select(Merchant).where(Merchant.api_key_id == public_id))
-            if merchant is None or not verify_api_key_secret(secret, merchant.api_key_hash):
+            api_key = db.scalar(
+                select(ApiKey).where(ApiKey.key_id == public_id, ApiKey.revoked_at.is_(None))
+            )
+            if api_key is None or not verify_api_key_secret(secret, api_key.key_hash):
                 return None
-            return merchant.id
+            return api_key.merchant_id
         finally:
             self._close(gen)
 

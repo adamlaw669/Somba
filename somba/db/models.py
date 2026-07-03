@@ -22,13 +22,56 @@ class Merchant(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     name: Mapped[str] = mapped_column(String(255), nullable=False)
-    api_key_id: Mapped[str] = mapped_column(String(32), unique=True, index=True, nullable=False)
-    api_key_hash: Mapped[str] = mapped_column(String(255), nullable=False)
+    email: Mapped[str | None] = mapped_column(String(255), unique=True, index=True, nullable=True)
+    password_hash: Mapped[str | None] = mapped_column(String(255), nullable=True)
     webhook_url: Mapped[str | None] = mapped_column(String(2048), nullable=True)
-    webhook_secret: Mapped[str] = mapped_column(String(255), nullable=False)
+    webhook_secret: Mapped[str] = mapped_column(String(255), nullable=False, default="")
 
     plans: Mapped[list["Plan"]] = relationship(back_populates="merchant")
     customers: Mapped[list["Customer"]] = relationship(back_populates="merchant")
+    sessions: Mapped[list["MerchantSession"]] = relationship(back_populates="merchant")
+    api_keys: Mapped[list["ApiKey"]] = relationship(back_populates="merchant")
+
+
+class ApiKey(Base):
+    """A named API key a merchant mints from the dashboard to use in their own code.
+
+    A merchant can hold several — e.g. one per environment — each independently
+    named and revocable without touching the others.
+    """
+
+    __tablename__ = "api_keys"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    merchant_id: Mapped[int] = mapped_column(ForeignKey("merchants.id"), index=True, nullable=False)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    key_id: Mapped[str] = mapped_column(String(32), unique=True, index=True, nullable=False)
+    key_hash: Mapped[str] = mapped_column(String(255), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    last_used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    merchant: Mapped["Merchant"] = relationship(back_populates="api_keys")
+
+
+class MerchantSession(Base):
+    """A dashboard login session — a separate credential from the API key.
+
+    Merchants authenticate to the dashboard with email/password to manage their
+    account and mint API keys; they authenticate to the billing API itself with
+    the API key. Keeping the two credentials apart means rotating one never
+    invalidates the other.
+    """
+
+    __tablename__ = "merchant_sessions"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    merchant_id: Mapped[int] = mapped_column(ForeignKey("merchants.id"), index=True, nullable=False)
+    session_id: Mapped[str] = mapped_column(String(32), unique=True, index=True, nullable=False)
+    session_secret_hash: Mapped[str] = mapped_column(String(255), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    merchant: Mapped["Merchant"] = relationship(back_populates="sessions")
 
 
 class PlanStatus(str, Enum):

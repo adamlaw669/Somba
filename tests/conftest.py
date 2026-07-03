@@ -9,7 +9,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 
-from somba.db.models import Base, Customer, Merchant, Plan, PlanStatus, Subscription, SubscriptionStatus
+from somba.db.models import ApiKey, Base, Customer, Merchant, Plan, PlanStatus, Subscription, SubscriptionStatus
 from somba.security import generate_api_key_material
 
 
@@ -39,15 +39,19 @@ def db(db_engine) -> Session:
 def make_merchant(db):
     """Factory: create and persist a merchant, return (merchant, raw_token)."""
     def _make(name: str = "Test Merchant") -> tuple[Merchant, str]:
-        key = generate_api_key_material()
-        m = Merchant(
-            name=name,
-            api_key_id=key.public_id,
-            api_key_hash=key.secret_hash,
-            webhook_url=None,
-            webhook_secret="whsec_test",
-        )
+        m = Merchant(name=name, webhook_url=None, webhook_secret="whsec_test")
         db.add(m)
+        db.flush()
+
+        key = generate_api_key_material()
+        db.add(
+            ApiKey(
+                merchant_id=m.id,
+                name="Default",
+                key_id=key.public_id,
+                key_hash=key.secret_hash,
+            )
+        )
         db.commit()
         db.refresh(m)
         return m, key.token
