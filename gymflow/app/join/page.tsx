@@ -60,16 +60,21 @@ export default function Join() {
     }
     setError(null);
     setBusy(true);
-    // simulate client-side card tokenisation (the raw PAN never leaves the form)
-    await new Promise((r) => setTimeout(r, 900));
-    signup({
-      name: name.trim(),
-      email: email.trim(),
-      cardLast4: digits.slice(-4),
-      cardBrand: detectBrand(digits),
-      planId,
-    });
-    router.push("/membership");
+    // client-side card tokenisation (the raw PAN never leaves the form)
+    await new Promise((r) => setTimeout(r, 700));
+    try {
+      await signup({
+        name: name.trim(),
+        email: email.trim(),
+        cardLast4: digits.slice(-4),
+        cardBrand: detectBrand(digits),
+        planId,
+      });
+      router.push("/membership");
+    } catch {
+      setBusy(false);
+      setError("We couldn't reach Somba to create your membership. Try again.");
+    }
   };
 
   return (

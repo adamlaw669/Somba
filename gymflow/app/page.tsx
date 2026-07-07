@@ -156,7 +156,8 @@ export default function Landing() {
             {PLANS.map((plan) => (
               <div
                 key={plan.id}
-                className={`relative flex flex-col rounded-2xl border overflow-hidden transition-transform hover:-translate-y-1 ${
+                onClick={() => choose(plan.id)}
+                className={`group relative flex flex-col rounded-2xl border overflow-hidden transition-transform hover:-translate-y-1 cursor-pointer ${
                   plan.featured
                     ? "bg-ink text-paper border-ink shadow-[0_24px_50px_-24px_rgba(0,0,0,0.5)]"
                     : "bg-paper text-ink border-concrete-2"
@@ -219,7 +220,10 @@ export default function Landing() {
                 <Button
                   variant={plan.featured ? "primary" : "dark"}
                   className="mt-7 w-full"
-                  onClick={() => choose(plan.id)}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    choose(plan.id);
+                  }}
                 >
                   Start {plan.name}
                 </Button>

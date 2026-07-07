@@ -101,12 +101,15 @@ export type WebhookEventType =
 
 export interface WebhookEvent {
   id: string;
-  type: WebhookEventType;
+  type: WebhookEventType | string;
   summary: string;
-  created_at: string;
+  created_at: string; // "" for live events (the API list carries no timestamp)
   delivered: boolean;
-  signature: string; // fake hmac for the demo
+  signature: string; // fake hmac for simulated events; "" for live
   payload: Record<string, unknown>;
+  source?: "live" | "sim";
+  status?: string; // live outbox status: pending | published
+  seq?: number; // live event id, for ordering
 }
 
 export interface TransferRequest {
