@@ -51,6 +51,6 @@ It shows the entry points, the outbox, relay shards, event queues, workers, the 
 
 ## Status
 
-Somba is implemented and running. The API is live at `https://somba-jade.vercel.app`, backed by Postgres and a Redpanda-based outbox relay, with a full test suite (unit + integration) passing in CI. The docs above describe the design; the code is the current source of truth for exact request/response shapes.
+Somba is implemented and running. The API is live at `https://somba-docs.vercel.app`, backed by Postgres and a Redpanda-based outbox relay, with a full test suite (unit + integration) passing in CI. The docs above describe the design; the code is the current source of truth for exact request/response shapes.
 
 > Somba by Team setld
