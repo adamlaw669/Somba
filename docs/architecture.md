@@ -75,4 +75,4 @@ Because external systems can be slow or inconsistent, Somba never assumes a sing
 
 ![Architecture](./assets/architecture.png)
 
-Architecture diagram will be placed here. It shows the full data flow from entry points (developers, customers, Nomba webhooks, and the scheduler) through the event queue, workers, state machine, and ledger, out to Nomba API and merchant endpoints.
+It shows the full data flow from entry points (developers, customers, Nomba webhooks, and the scheduler) through the event queue, workers, state machine, and ledger, out to Nomba API and merchant endpoints.
